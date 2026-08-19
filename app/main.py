@@ -1,3 +1,4 @@
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -13,6 +14,7 @@ from app.redis_client import redis_client
 HOLD_DURATION_MINUTES = 5
 LOCK_TTL_SECONDS = 5
 RELEASE_CHECK_INTERVAL_SECONDS = 10
+ADMIT_LIMIT = 2  # small on purpose, so it's easy to demo with just a couple requests
 
 scheduler = BackgroundScheduler()
 
@@ -178,3 +180,31 @@ def confirm_booking(payload: ConfirmBookingRequest, idempotency_key: str = Heade
     finally:
         cur.close()
         conn.close()
+
+
+@app.post("/events/{event_id}/queue/join")
+def join_queue(event_id: str):
+    """Adds this caller to the back of the line for this event. The sorted
+    set is ordered by join time (the score), which is what gives us FIFO
+    ordering for free - Redis keeps it sorted, we don't have to."""
+    queue_token = str(uuid.uuid4())
+    redis_client.zadd(f"queue:{event_id}", {queue_token: time.time()})
+    return {"queue_token": queue_token}
+
+
+@app.get("/events/{event_id}/queue/{queue_token}/status")
+def queue_status(event_id: str, queue_token: str):
+    rank = redis_client.zrank(f"queue:{event_id}", queue_token)
+    if rank is None:
+        raise HTTPException(status_code=404, detail="Token not found - you may have already left the queue")
+    admitted = rank < ADMIT_LIMIT
+    return {"position": rank + 1, "admitted": admitted}
+
+
+@app.post("/events/{event_id}/queue/{queue_token}/leave")
+def leave_queue(event_id: str, queue_token: str):
+    """Call this once an admitted user is done (has confirmed a booking, or
+    given up) - it frees their slot so the NEXT person in line becomes
+    admitted. Without this step, admitted slots would never free up."""
+    redis_client.zrem(f"queue:{event_id}", queue_token)
+    return {"left": True}
