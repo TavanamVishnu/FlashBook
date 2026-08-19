@@ -3,7 +3,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
+from pydantic import BaseModel
+from psycopg2.errors import UniqueViolation
 
 from app.db import get_connection
 from app.redis_client import redis_client
@@ -16,10 +18,6 @@ scheduler = BackgroundScheduler()
 
 
 def release_expired_holds():
-    """Background job: finds seats whose hold has expired and puts them back
-    to 'available'. This is what actually enforces the 5-minute hold limit -
-    without this running, a seat someone abandoned mid-checkout would stay
-    locked forever."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
@@ -43,6 +41,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FlashBook API", lifespan=lifespan)
+
+
+class ConfirmBookingRequest(BaseModel):
+    user_email: str
+    seat_id: str
 
 
 @app.get("/health")
@@ -82,10 +85,7 @@ def list_seats(event_id: str):
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    return [
-        {"seat_id": r[0], "seat_label": r[1], "status": r[2], "hold_expires_at": r[3]}
-        for r in rows
-    ]
+    return [{"seat_id": r[0], "seat_label": r[1], "status": r[2], "hold_expires_at": r[3]} for r in rows]
 
 
 @app.post("/events/{event_id}/seats/{seat_id}/hold")
@@ -112,3 +112,69 @@ def hold_seat(event_id: str, seat_id: str):
         return {"seat_id": seat_id, "status": "held", "hold_expires_at": hold_expires_at.isoformat()}
     finally:
         redis_client.delete(lock_key)
+
+
+@app.post("/bookings/confirm")
+def confirm_booking(payload: ConfirmBookingRequest, idempotency_key: str = Header(...)):
+    """Idempotent by design: retried requests with the same Idempotency-Key
+    always return the SAME booking, never create a second one - even if two
+    copies of this exact request race each other concurrently. The real
+    guarantee here isn't the "check for existing key" query below (that alone
+    has a race window); it's the UNIQUE constraint on bookings.idempotency_key
+    from schema.sql. The check is just an optimization for the common case;
+    the except UniqueViolation block below is what actually makes this safe."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, seat_id, status FROM bookings WHERE idempotency_key = %s",
+            (idempotency_key,),
+        )
+        existing = cur.fetchone()
+        if existing:
+            return {"booking_id": existing[0], "seat_id": existing[1], "status": existing[2], "replayed": True}
+
+        cur.execute("SELECT id FROM users WHERE email = %s", (payload.user_email,))
+        user_row = cur.fetchone()
+        if user_row:
+            user_id = user_row[0]
+        else:
+            user_id = str(uuid.uuid4())
+            cur.execute(
+                "INSERT INTO users (id, email, password_hash) VALUES (%s, %s, %s)",
+                (user_id, payload.user_email, "mock_hash"),
+            )
+
+        cur.execute(
+            "UPDATE seats SET status = 'booked', hold_expires_at = NULL "
+            "WHERE id = %s AND status = 'held'",
+            (payload.seat_id,),
+        )
+        if cur.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Seat is not currently held - cannot confirm")
+
+        booking_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO bookings (id, user_id, seat_id, idempotency_key, status) "
+            "VALUES (%s, %s, %s, %s, 'confirmed')",
+            (booking_id, user_id, payload.seat_id, idempotency_key),
+        )
+        cur.execute(
+            "INSERT INTO payments (id, booking_id, amount, status) VALUES (%s, %s, %s, 'mock_success')",
+            (str(uuid.uuid4()), booking_id, 20.00),
+        )
+        conn.commit()
+        return {"booking_id": booking_id, "seat_id": payload.seat_id, "status": "confirmed", "replayed": False}
+
+    except UniqueViolation:
+        conn.rollback()
+        cur.execute(
+            "SELECT id, seat_id, status FROM bookings WHERE idempotency_key = %s",
+            (idempotency_key,),
+        )
+        existing = cur.fetchone()
+        return {"booking_id": existing[0], "seat_id": existing[1], "status": existing[2], "replayed": True}
+    finally:
+        cur.close()
+        conn.close()
