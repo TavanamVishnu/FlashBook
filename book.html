@@ -1,0 +1,200 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FlashBook</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; color: #222; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  select { padding: 8px; font-size: 14px; border-radius: 6px; border: 1px solid #ccc; margin-bottom: 20px; }
+
+  .legend { display: flex; gap: 16px; font-size: 13px; margin-bottom: 16px; color: #555; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  .grid { display: flex; flex-direction: column; gap: 6px; margin-bottom: 24px; }
+  .grid-row { display: flex; gap: 6px; }
+  .seat {
+    width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center;
+    justify-content: center; font-size: 10px; font-weight: 600; cursor: pointer;
+    border: 2px solid transparent; color: white; user-select: none;
+  }
+  .seat.available.standard { background: #4a90d9; }
+  .seat.available.premium  { background: #7c5cd6; }
+  .seat.available.vip      { background: #d6a13c; }
+  .seat.held    { background: #c9c9c9; cursor: not-allowed; }
+  .seat.booked  { background: #444; cursor: not-allowed; }
+  .seat.selected { border-color: #111; box-shadow: 0 0 0 2px white inset; }
+
+  #panel { border: 1px solid #eee; border-radius: 10px; padding: 16px; display: none; }
+  #panel label { display: block; font-size: 13px; font-weight: 600; margin-top: 10px; }
+  #panel input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; }
+  #panel button { margin-top: 14px; padding: 9px 16px; background: #111; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  #timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+  #msg { margin-top: 12px; padding: 10px; border-radius: 6px; font-size: 13px; white-space: pre-wrap; display: none; }
+  .ok  { background: #e7f7ec; color: #1a7a3c; display: block !important; }
+  .err { background: #fdeaea; color: #b3261e; display: block !important; }
+</style>
+</head>
+<body>
+
+<h1>FlashBook</h1>
+<select id="eventSelect" onchange="loadSeats()"><option>Loading events...</option></select>
+
+<div class="legend">
+  <span><span class="swatch" style="background:#4a90d9"></span>Standard</span>
+  <span><span class="swatch" style="background:#7c5cd6"></span>Premium</span>
+  <span><span class="swatch" style="background:#d6a13c"></span>VIP</span>
+  <span><span class="swatch" style="background:#c9c9c9"></span>Held</span>
+  <span><span class="swatch" style="background:#444"></span>Booked</span>
+</div>
+
+<div id="grid" class="grid"></div>
+
+<div id="panel">
+  <div>Seat <strong id="selectedLabel"></strong> held for you - <span id="timer">5:00</span> remaining</div>
+  <label>Your email</label>
+  <input id="email" type="email" placeholder="you@example.com">
+  <button onclick="confirmBooking()">Confirm booking</button>
+</div>
+
+<div id="msg"></div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+let currentEventId = null;
+let selectedSeatId = null;
+let idempotencyKey = null;
+let countdownInterval = null;
+
+async function loadEvents() {
+  const resp = await fetch(`${API_BASE}/events`);
+  const events = await resp.json();
+  const sel = document.getElementById("eventSelect");
+  sel.innerHTML = "";
+  if (events.length === 0) {
+    sel.innerHTML = "<option>No events yet - create one in admin.html</option>";
+    return;
+  }
+  for (const ev of events) {
+    const opt = document.createElement("option");
+    opt.value = ev.event_id;
+    opt.textContent = `${ev.name} - ${ev.venue}`;
+    sel.appendChild(opt);
+  }
+  loadSeats();
+}
+
+async function loadSeats() {
+  const sel = document.getElementById("eventSelect");
+  currentEventId = sel.value;
+  if (!currentEventId) return;
+
+  const resp = await fetch(`${API_BASE}/events/${currentEventId}/seats`);
+  const seats = await resp.json();
+
+  const maxRow = Math.max(...seats.map(s => s.row));
+  const rows = [];
+  for (let r = 1; r <= maxRow; r++) rows.push(seats.filter(s => s.row === r).sort((a, b) => a.col - b.col));
+
+  const gridEl = document.getElementById("grid");
+  gridEl.innerHTML = "";
+  for (const rowSeats of rows) {
+    const rowEl = document.createElement("div");
+    rowEl.className = "grid-row";
+    for (const seat of rowSeats) {
+      const seatEl = document.createElement("div");
+      seatEl.className = `seat ${seat.status} ${seat.seat_type}`;
+      seatEl.textContent = seat.seat_label;
+      seatEl.title = `${seat.seat_label} (${seat.seat_type}) - ${seat.status}`;
+      if (seat.status === "available") {
+        seatEl.onclick = () => holdSeat(seat.seat_id, seat.seat_label);
+      }
+      rowEl.appendChild(seatEl);
+    }
+    gridEl.appendChild(rowEl);
+  }
+}
+
+async function holdSeat(seatId, seatLabel) {
+  clearMsg();
+  try {
+    const resp = await fetch(`${API_BASE}/events/${currentEventId}/seats/${seatId}/hold`, { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok) {
+      showMsg(`Couldn't hold that seat: ${data.detail}`, "err");
+      loadSeats();
+      return;
+    }
+    selectedSeatId = seatId;
+    idempotencyKey = crypto.randomUUID();
+    document.getElementById("selectedLabel").textContent = seatLabel;
+    document.getElementById("panel").style.display = "block";
+    startCountdown(new Date(data.hold_expires_at));
+    loadSeats();
+  } catch (e) {
+    showMsg(`Request failed: ${e}. Is the API running at ${API_BASE}?`, "err");
+  }
+}
+
+function startCountdown(expiresAt) {
+  if (countdownInterval) clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    const remainingMs = expiresAt - new Date();
+    if (remainingMs <= 0) {
+      clearInterval(countdownInterval);
+      document.getElementById("timer").textContent = "expired";
+      showMsg("Your hold expired - the seat has been released. Pick another.", "err");
+      document.getElementById("panel").style.display = "none";
+      loadSeats();
+      return;
+    }
+    const mins = Math.floor(remainingMs / 60000);
+    const secs = Math.floor((remainingMs % 60000) / 1000);
+    document.getElementById("timer").textContent = `${mins}:${secs.toString().padStart(2, "0")}`;
+  }, 1000);
+}
+
+async function confirmBooking() {
+  const email = document.getElementById("email").value;
+  if (!email) {
+    showMsg("Enter your email first.", "err");
+    return;
+  }
+  try {
+    const resp = await fetch(`${API_BASE}/bookings/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ user_email: email, seat_id: selectedSeatId }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      showMsg(`Couldn't confirm: ${data.detail}`, "err");
+      return;
+    }
+    clearInterval(countdownInterval);
+    document.getElementById("panel").style.display = "none";
+    showMsg(`Booked! Confirmation ID: ${data.booking_id}`, "ok");
+    loadSeats();
+  } catch (e) {
+    showMsg(`Request failed: ${e}`, "err");
+  }
+}
+
+function showMsg(text, cls) {
+  const el = document.getElementById("msg");
+  el.className = cls;
+  el.textContent = text;
+}
+function clearMsg() {
+  const el = document.getElementById("msg");
+  el.className = "";
+  el.style.display = "none";
+}
+
+loadEvents();
+</script>
+
+</body>
+</html>
