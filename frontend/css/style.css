@@ -1,0 +1,98 @@
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  margin: 0;
+  padding: 2rem;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+h1, h2 {
+  color: #f8fafc;
+}
+
+nav a {
+  color: #93c5fd;
+  margin-right: 1rem;
+  text-decoration: none;
+}
+
+nav a:hover { text-decoration: underline; }
+
+.card {
+  background: #1e293b;
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+input, button, select {
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  margin-bottom: 0.5rem;
+  width: 100%;
+}
+
+button {
+  background: #6366f1;
+  border: none;
+  cursor: pointer;
+  width: auto;
+  padding: 0.5rem 1.25rem;
+}
+
+button:hover { background: #4f46e5; }
+button:disabled { background: #475569; cursor: not-allowed; }
+
+.error { color: #f87171; margin: 0.5rem 0; }
+.success { color: #4ade80; margin: 0.5rem 0; }
+
+.event-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  border-bottom: 1px solid #334155;
+}
+
+.seat-grid {
+  display: grid;
+  gap: 6px;
+  margin: 1rem 0;
+}
+
+.seat {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.seat.available.standard { background: #334155; }
+.seat.available.premium { background: #1d4ed8; }
+.seat.available.vip { background: #a16207; }
+.seat.held { background: #ca8a04; cursor: not-allowed; }
+.seat.held.mine { background: #eab308; border-color: #fff; cursor: pointer; }
+.seat.booked { background: #7f1d1d; cursor: not-allowed; }
+.seat.selected { border-color: #4ade80; }
+
+.legend { display: flex; gap: 1rem; margin-bottom: 1rem; font-size: 0.85rem; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
+#countdown { font-weight: bold; color: #facc15; }

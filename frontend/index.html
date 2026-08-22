@@ -1,0 +1,31 @@
+<title>FlashBook — Login</title>
+<link rel="stylesheet" href="css/style.css">
+
+<div class="container">
+  <h1>FlashBook</h1>
+
+  <div class="card" id="login-view">
+    <h2>Log in</h2>
+    <input id="login-email" type="email" placeholder="Email">
+    <input id="login-password" type="password" placeholder="Password">
+    <button id="login-btn">Log in</button>
+    <div id="login-error" class="error"></div>
+    <div id="login-success" class="success"></div>
+    <p>Don't have an account? <a href="#" id="show-signup-link">Sign up</a></p>
+  </div>
+
+  <div class="card" id="signup-view" style="display:none">
+    <h2>Sign up</h2>
+    <input id="signup-email" type="email" placeholder="Email">
+    <input id="signup-password" type="password" placeholder="Password">
+    <button id="signup-btn">Sign up</button>
+    <div id="signup-error" class="error"></div>
+    <div id="signup-success" class="success"></div>
+    <p>Already have an account? <a href="#" id="show-login-link">Log in</a></p>
+  </div>
+
+  <nav><a href="admin.html">Admin panel</a></nav>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>

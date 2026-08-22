@@ -1,0 +1,31 @@
+<title>FlashBook — Admin</title>
+<link rel="stylesheet" href="css/style.css">
+
+<div class="container">
+  <nav><a href="index.html">Back to app</a></nav>
+  <h1>Admin Panel</h1>
+
+  <div class="card" id="login-card">
+    <h2>Admin login</h2>
+    <input id="admin-password" type="password" placeholder="Admin password">
+    <button id="admin-login-btn">Log in</button>
+    <div id="admin-login-error" class="error"></div>
+  </div>
+
+  <div class="card" id="create-event-card" style="display:none">
+    <h2>Create event</h2>
+    <input id="ev-name" placeholder="Event name (e.g. Coldplay Live)">
+    <input id="ev-venue" placeholder="Venue">
+    <input id="ev-starts-at" type="datetime-local">
+    <input id="ev-rows" type="number" placeholder="Rows" min="1">
+    <input id="ev-cols" type="number" placeholder="Columns" min="1">
+    <input id="ev-vip-rows" type="number" placeholder="VIP rows (from the front)" min="0" value="0">
+    <input id="ev-premium-rows" type="number" placeholder="Premium rows (after VIP)" min="0" value="0">
+    <button id="create-event-btn">Create event</button>
+    <div id="create-event-error" class="error"></div>
+    <div id="create-event-success" class="success"></div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/admin.js"></script>

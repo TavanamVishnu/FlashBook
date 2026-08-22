@@ -1,0 +1,44 @@
+<title>FlashBook — Seat Map</title>
+<link rel="stylesheet" href="css/style.css">
+
+<div class="container">
+  <nav>
+    <a href="events.html">Events</a>
+    <a href="#" id="logout-link">Log out</a>
+  </nav>
+  <h1 id="event-title">Loading event...</h1>
+  <p id="event-meta"></p>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:#334155"></span> Standard</span>
+    <span><span class="swatch" style="background:#1d4ed8"></span> Premium</span>
+    <span><span class="swatch" style="background:#a16207"></span> VIP</span>
+    <span><span class="swatch" style="background:#ca8a04"></span> Held (someone)</span>
+    <span><span class="swatch" style="background:#eab308"></span> Held (you)</span>
+    <span><span class="swatch" style="background:#7f1d1d"></span> Booked</span>
+  </div>
+
+  <div id="seat-grid" class="seat-grid card"></div>
+
+  <div id="hold-panel" class="card" style="display:none">
+    <p>You are holding seat <strong id="held-seat-label"></strong>. Confirm before your hold expires: <span id="countdown"></span></p>
+    <button id="confirm-btn">Confirm booking</button>
+    <button id="release-btn">Release seat</button>
+    <div id="hold-error" class="error"></div>
+    <div id="hold-success" class="success"></div>
+  </div>
+
+  <div class="card">
+    <h2>Flash-sale waiting room</h2>
+    <p>If this event is in high demand, join the waiting room instead of hammering the seat map.</p>
+    <button id="queue-join-btn">Join waiting room</button>
+    <div id="queue-status"></div>
+  </div>
+
+  <div class="card">
+    <a href="bookings.html">View my booking history</a>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/seatmap.js"></script>
